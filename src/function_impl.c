@@ -1,5 +1,55 @@
 #include "main.h"
 
+void RealVectorAssemble(const Vec *vec, Vec *vec_re)
+{
+    PetscInt row_loc = 0;
+    PetscCall(VecGetLocalSize(*vec, &row_loc));
+
+    PetscInt loc_row_start = 0, loc_row_end = 0;
+    PetscCall(VecGetOwnershipRange(*vec, &loc_row_start, &loc_row_end));
+
+    PetscCall(VecCreate(PETSC_COMM_WORLD, vec_re));
+    PetscCall(VecSetSizes(*vec_re, row_loc, PETSC_DETERMINE));
+    PetscCall(VecSetUp(*vec_re));
+
+    for (int index = loc_row_start; index < loc_row_end; ++index)
+    {
+        PetscScalar val_tmp;
+        PetscCall(VecGetValues(*vec, 1, &index, &val_tmp));
+
+        PetscScalar val_tmp_re = PetscRealPart(val_tmp);
+        PetscCall(VecSetValues(*vec_re, 1, &index, &val_tmp_re, INSERT_VALUES));
+    }
+
+    PetscCall(VecAssemblyBegin(*vec_re));
+    PetscCall(VecAssemblyEnd(*vec_re));
+}
+
+void ImaginaryVectorAssemble(const Vec *vec, Vec *vec_im)
+{
+    PetscInt row_loc = 0;
+    PetscCall(VecGetLocalSize(*vec, &row_loc));
+
+    PetscInt loc_row_start = 0, loc_row_end = 0;
+    PetscCall(VecGetOwnershipRange(*vec, &loc_row_start, &loc_row_end));
+
+    PetscCall(VecCreate(PETSC_COMM_WORLD, vec_im));
+    PetscCall(VecSetSizes(*vec_im, row_loc, PETSC_DETERMINE));
+    PetscCall(VecSetUp(*vec_im));
+
+    for (int index = loc_row_start; index < loc_row_end; ++index)
+    {
+        PetscScalar val_tmp;
+        PetscCall(VecGetValues(*vec, 1, &index, &val_tmp));
+
+        PetscScalar val_tmp_im = PetscImaginaryPart(val_tmp);
+        PetscCall(VecSetValues(*vec_im, 1, &index, &val_tmp_im, INSERT_VALUES));
+    }
+
+    PetscCall(VecAssemblyBegin(*vec_im));
+    PetscCall(VecAssemblyEnd(*vec_im));
+}
+
 void RealMatrixAssemble(const Mat *mat, Mat *mat_re)
 {
     PetscInt row_loc = 0, col_loc = 0;
@@ -12,8 +62,6 @@ void RealMatrixAssemble(const Mat *mat, Mat *mat_re)
     PetscCall(MatGetRowIJ(*mat, 0, PETSC_FALSE, PETSC_TRUE, NULL, &csr_ia, &csr_ja, &done));
     PetscCall(MatGetOwnershipRange(*mat, &loc_row_start, &loc_row_end));
 
-printf("loc nnz = %d, loc_row_start = %d, loc_row_end = %d\n", csr_ia[row_loc], loc_row_start, loc_row_end);
-
     PetscCall(MatCreate(PETSC_COMM_WORLD, mat_re));
     PetscCall(MatSetSizes(*mat_re, row_loc, col_loc, PETSC_DETERMINE, PETSC_DETERMINE));
     PetscCall(MatSetType(*mat_re, MATAIJ));
@@ -21,8 +69,8 @@ printf("loc nnz = %d, loc_row_start = %d, loc_row_end = %d\n", csr_ia[row_loc], 
 
     for (int index = loc_row_start; index < loc_row_end; ++index)
     {
-        int index_start = csr_ia[index];
-        int index_end = csr_ia[index + 1];
+        int index_start = csr_ia[index - loc_row_start];
+        int index_end = csr_ia[index - loc_row_start + 1];
         for (int index_j = index_start; index_j < index_end; ++index_j)
         {
             PetscScalar val_tmp;
@@ -56,15 +104,15 @@ void ImaginaryMatrixAssemble(const Mat *mat, Mat *mat_im)
 
     for (int index = loc_row_start; index < loc_row_end; ++index)
     {
-        int index_start = csr_ia[index];
-        int index_end = csr_ia[index + 1];
+        int index_start = csr_ia[index - loc_row_start];
+        int index_end = csr_ia[index - loc_row_start + 1];
         for (int index_j = index_start; index_j < index_end; ++index_j)
         {
             PetscScalar val_tmp;
             PetscCall(MatGetValue(*mat, index, csr_ja[index_j], &val_tmp));
 
-            PetscScalar val_tmp_re = PetscImaginaryPart(val_tmp);
-            PetscCall(MatSetValues(*mat_im, 1, &index, 1, csr_ja + index_j, &val_tmp_re, INSERT_VALUES));
+            PetscScalar val_tmp_im = PetscImaginaryPart(val_tmp);
+            PetscCall(MatSetValues(*mat_im, 1, &index, 1, csr_ja + index_j, &val_tmp_im, INSERT_VALUES));
         }
     }
 

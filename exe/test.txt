@@ -1,0 +1,11 @@
+path to matrix file: ../input/csr_mat.txt
+path to rhs file: ../input/rhs_vec.txt
+path to solution file: ../input/sol_vec.txt
+>>>> begin to process linear system file >>>>
+>>>> linear system file has been processed !!!
+>>>> begin to assemble petsc linear system >>>>
+>>>> petsc linear system has been assembled !!!
+            || b ||_2 = 3.4094128542543075e+01
+|| r ||_2 / || b ||_2 = 9.6356056430077929e-09
+block             || b ||_2 = 3.4094128542543061e+01
+block || r ||_2 / || b ||_2 = 9.6356056398212649e-09

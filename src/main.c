@@ -113,21 +113,14 @@ int main(int argc, char **argv)
      * [solver_a_im     solver_a_re] [solver_x_im] = [solver_b_im]
      */
     Mat solver_a_re, solver_a_im, solver_a_im_oppo; // real part, imaginary part, opposite imaginary part
-    Vec solver_x_re, solver_x_im;
-    Vec solver_b_re, solver_b_im;
 
-    printf(">>>> in rank %d/%d, real part, begin... >>>>\n", irank, nproc);
     RealMatrixAssemble(&solver_a, &solver_a_re);
-    printf(">>>> in rank %d/%d, real part ended!!! ====\n", irank, nproc);
-    
-    printf("\n>>>> in rank %d/%d, imaginary part, begin... >>>>\n", irank, nproc);
     ImaginaryMatrixAssemble(&solver_a, &solver_a_im);
-    printf(">>>> in rank %d/%d, imaginary part ended!!! ====\n", irank, nproc);
 
     PetscCall(MatDuplicate(solver_a_im, MAT_DO_NOT_COPY_VALUES, &solver_a_im_oppo));
     PetscCall(MatAXPY(solver_a_im_oppo, -1., solver_a_im, SAME_NONZERO_PATTERN));
 
-#if 1
+#if 0
     PetscInt n_re = 0, n_im = 0;
     PetscCall(MatGetSize(solver_a_re, &n_re, NULL));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== real part matrix data:\n"));
@@ -146,17 +139,86 @@ int main(int argc, char **argv)
 #endif // view real/imaginary part matrix
 
     Mat mat_array[4] = {solver_a_re, solver_a_im_oppo, solver_a_im, solver_a_re};
-    Mat solver_block_mat;
+    Mat solver_block_a;
 
-    PetscCall(MatCreateNest(PETSC_COMM_WORLD, 2, NULL, 2, NULL, mat_array, &solver_block_mat));
+    PetscCall(MatCreateNest(PETSC_COMM_WORLD, 2, NULL, 2, NULL, mat_array, &solver_block_a));
 
 #if 0
     PetscInt n_block = 0;
-    PetscCall(MatGetSize(solver_block_mat, &n_block, NULL));
+    PetscCall(MatGetSize(solver_block_a, &n_block, NULL));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== 2x2 block matrix data:\n"));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of 2x2 block matrix: %d\n", n_block));
-    PetscCall(MatView(solver_block_mat, PETSC_VIEWER_STDOUT_WORLD));
+    PetscCall(MatView(solver_block_a, PETSC_VIEWER_STDOUT_WORLD));
 #endif // view block matrix
+
+    Vec solver_x_re, solver_x_im;
+    Vec solver_b_re, solver_b_im;
+
+    RealVectorAssemble(&solver_b, &solver_b_re);
+    ImaginaryVectorAssemble(&solver_b, &solver_b_im);
+    RealVectorAssemble(&solver_x, &solver_x_re);
+    ImaginaryVectorAssemble(&solver_x, &solver_x_im);
+
+#if 0
+    PetscInt n_vec = 0;
+    PetscCall(VecGetSize(solver_b_re, &n_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== real part rhs data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of real part of rhs: %d\n", n_vec));
+    PetscCall(VecView(solver_b_re, PETSC_VIEWER_STDOUT_WORLD));
+
+    PetscCall(VecGetSize(solver_b_im, &n_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== imaginary part rhs data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of imaginary part of rhs: %d\n", n_vec));
+    PetscCall(VecView(solver_b_im, PETSC_VIEWER_STDOUT_WORLD));
+
+    PetscCall(VecGetSize(solver_x_re, &n_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== real part solution data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of real part of solution: %d\n", n_vec));
+    PetscCall(VecView(solver_x_re, PETSC_VIEWER_STDOUT_WORLD));
+
+    PetscCall(VecGetSize(solver_x_im, &n_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== imaginary part solution data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of imaginary part of solution: %d\n", n_vec));
+    PetscCall(VecView(solver_x_im, PETSC_VIEWER_STDOUT_WORLD));
+#endif // view real/imaginar part vector
+
+    Vec rhs_vec_array[2] = {solver_b_re, solver_b_im};
+    Vec solver_block_b;
+    Vec sol_vec_array[2] = {solver_x_re, solver_x_im};
+    Vec solver_block_x;
+
+    PetscCall(VecCreateNest(PETSC_COMM_WORLD, 2, NULL, rhs_vec_array, &solver_block_b));
+    PetscCall(VecCreateNest(PETSC_COMM_WORLD, 2, NULL, sol_vec_array, &solver_block_x));
+
+#if 0
+    PetscInt n_block_vec = 0;
+    PetscCall(VecGetSize(solver_block_b, &n_block_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== block rhs data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of block rhs: %d\n", n_block_vec));
+    PetscCall(VecView(solver_block_b, PETSC_VIEWER_STDOUT_WORLD));
+
+    PetscCall(VecGetSize(solver_block_x, &n_block_vec));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "\n==== block rhs data:\n"));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "size of block rhs: %d\n", n_block_vec));
+    PetscCall(VecView(solver_block_x, PETSC_VIEWER_STDOUT_WORLD));
+#endif // view block vector
+
+#if 1
+    Vec solver_block_r;
+    PetscReal b_block_norm_2 = 0.;
+    PetscReal r_block_norm_2 = 0.;
+
+    PetscCall(VecDuplicate(solver_block_x, &solver_block_r));
+
+    PetscCall(VecNorm(solver_block_b, NORM_2, &b_block_norm_2));
+
+    PetscCall(MatMult(solver_block_a, solver_block_x, solver_block_r));
+    PetscCall(VecAXPY(solver_block_r, -1., solver_block_b));
+    PetscCall(VecNorm(solver_block_r, NORM_2, &r_block_norm_2));
+
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "block             || b ||_2 = %021.16le\n", b_block_norm_2));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "block || r ||_2 / || b ||_2 = %021.16le\n", r_block_norm_2 / b_block_norm_2));
+#endif // residual norm
 
 #if 0
      // solving linear system with ksp
@@ -176,9 +238,14 @@ int main(int argc, char **argv)
     PetscCall(MatDestroy(&solver_a_re));
     PetscCall(MatDestroy(&solver_a_im));
     PetscCall(MatDestroy(&solver_a_im_oppo));
+
     PetscCall(VecDestroy(&solver_b));
     PetscCall(VecDestroy(&solver_x));
     PetscCall(VecDestroy(&solver_u));
+    PetscCall(VecDestroy(&solver_b_re));
+    PetscCall(VecDestroy(&solver_b_im));
+    PetscCall(VecDestroy(&solver_x_re));
+    PetscCall(VecDestroy(&solver_x_im));
 
     // free memory
     CSRMatrixFree(&mat_a);
