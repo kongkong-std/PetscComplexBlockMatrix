@@ -1,5 +1,42 @@
 #include "main.h"
 
+#ifdef NEW_METHOD
+void BlockPetscMatrixAssemble(const Mat *mat_00, const Mat *mat_01,
+                              const Mat *mat_10, const Mat *mat_11,
+                              Mat *mat)
+{
+    PetscInt n_mat = 0, m_mat = 0;
+    PetscCall(MatGetSize(*mat_00, &n_mat, &m_mat));
+
+    PetscCall(MatCreate(PETSC_COMM_WORLD, mat));
+    PetscCall(MatSetSizes(*mat, PETSC_DECIDE, PETSC_DECIDE, 2 * n_mat, 2 * m_mat));
+    PetscCall(MatSetType(*mat, MATAIJ));
+    PetscCall(MatSetUp(*mat));
+}
+
+void BlockPetscVectorAssemble(const Vec *vec_00, const Vec *vec_01,
+                              Vec *vec)
+{
+}
+#endif
+
+void CombineTwoVectors(const Vec *vec1, const Vec *vec2, Vec *vec)
+{
+    PetscInt n1 = 0, n2 = 0;
+    PetscInt n = 0;
+
+    PetscCall(VecGetSize(*vec1, &n1));
+    PetscCall(VecGetSize(*vec2, &n2));
+
+    n = n1 + n2;
+    PetscCall(VecCreate(PETSC_COMM_WORLD, vec));
+    PetscCall(VecSetSizes(*vec, PETSC_DECIDE, n));
+    PetscCall(VecSetType(*vec, VECMPI));
+
+    Vec vec_array[2] = {*vec1, *vec2};
+    PetscCall(VecConcatenate(2, vec_array, vec, NULL));
+}
+
 void RealVectorAssemble(const Vec *vec, Vec *vec_re)
 {
     PetscInt row_loc = 0;

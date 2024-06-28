@@ -73,17 +73,19 @@ int main(int argc, char **argv)
 
 #if 1
     Vec solver_r;
-    PetscReal b_norm_2 = 0.;
+    PetscReal b_norm_2 = 0., x_norm_2 = 0.;
     PetscReal r_norm_2 = 0.;
 
     PetscCall(VecDuplicate(solver_x, &solver_r));
 
     PetscCall(VecNorm(solver_b, NORM_2, &b_norm_2));
+    PetscCall(VecNorm(solver_x, NORM_2, &x_norm_2));
 
     PetscCall(MatMult(solver_a, solver_x, solver_r));
     PetscCall(VecAXPY(solver_r, -1., solver_b));
     PetscCall(VecNorm(solver_r, NORM_2, &r_norm_2));
 
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "            || x ||_2 = %021.16le\n", x_norm_2));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "            || b ||_2 = %021.16le\n", b_norm_2));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "|| r ||_2 / || b ||_2 = %021.16le\n", r_norm_2 / b_norm_2));
 #endif // residual norm
@@ -138,10 +140,26 @@ int main(int argc, char **argv)
     PetscCall(MatView(solver_a_im_oppo, PETSC_VIEWER_STDOUT_WORLD));
 #endif // view real/imaginary part matrix
 
+#ifdef NEW_METHOD
+    Mat solver_block_a;
+    BlockPetscMatrixAssemble(&solver_a_re, &solver_a_im_oppo, &solver_a_im, &solver_a_re, &solver_block_a);
+#endif
+
+#if 0
     Mat mat_array[4] = {solver_a_re, solver_a_im_oppo, solver_a_im, solver_a_re};
     Mat solver_block_a;
 
     PetscCall(MatCreateNest(PETSC_COMM_WORLD, 2, NULL, 2, NULL, mat_array, &solver_block_a));
+#endif
+
+#if 1
+    Mat mat_array[4] = {solver_a_re, solver_a_im_oppo, solver_a_im, solver_a_re};
+    Mat mat_nest;
+    Mat solver_block_a;
+
+    PetscCall(MatCreateNest(PETSC_COMM_WORLD, 2, NULL, 2, NULL, mat_array, &mat_nest));
+    PetscCall(MatConvert(mat_nest, MATAIJ, MAT_INITIAL_MATRIX, &solver_block_a));
+#endif
 
 #if 0
     PetscInt n_block = 0;
@@ -182,6 +200,19 @@ int main(int argc, char **argv)
     PetscCall(VecView(solver_x_im, PETSC_VIEWER_STDOUT_WORLD));
 #endif // view real/imaginar part vector
 
+#ifdef NEW_METHOD
+    Vec solver_block_b, solver_block_x;
+    BlockPetscVectorAssemble(&solver_b_re, &solver_b_im, &solver_block_b);
+    BlockPetscVectorAssemble(&solver_x_re, &solver_x_im, &solver_block_x);
+#endif // NEW_METHOD
+
+#if 0
+    Vec solver_block_b, solver_block_x;
+    CombineTwoVectors(&solver_b_re, &solver_b_im, &solver_block_b);
+    CombineTwoVectors(&solver_x_re, &solver_x_im, &solver_block_x);
+#endif
+
+#if 1
     Vec rhs_vec_array[2] = {solver_b_re, solver_b_im};
     Vec solver_block_b;
     Vec sol_vec_array[2] = {solver_x_re, solver_x_im};
@@ -189,6 +220,7 @@ int main(int argc, char **argv)
 
     PetscCall(VecCreateNest(PETSC_COMM_WORLD, 2, NULL, rhs_vec_array, &solver_block_b));
     PetscCall(VecCreateNest(PETSC_COMM_WORLD, 2, NULL, sol_vec_array, &solver_block_x));
+#endif
 
 #if 0
     PetscInt n_block_vec = 0;
@@ -204,18 +236,51 @@ int main(int argc, char **argv)
 #endif // view block vector
 
 #if 1
+    // solver_a_re * solver_x_re - solver_a_im * solver_x_im = solver_b_re
+    Vec r_tmp_re_1, r_tmp_re_2;
+    PetscCall(VecDuplicate(solver_b_re, &r_tmp_re_1));
+    PetscCall(VecDuplicate(solver_b_re, &r_tmp_re_2));
+
+    PetscCall(MatMult(solver_a_re, solver_x_re, r_tmp_re_1));
+    PetscCall(MatMult(solver_a_im_oppo, solver_x_im, r_tmp_re_2));
+    PetscCall(VecAXPY(r_tmp_re_1, 1., r_tmp_re_2));
+    PetscCall(VecAXPY(r_tmp_re_1, -1., solver_b_re));
+
+    PetscReal r_tmp_re_norm_2 = 0.;
+    PetscCall(VecNorm(r_tmp_re_1, NORM_2, &r_tmp_re_norm_2));
+
+    // solver_a_im * solver_x_re + solver_a_re * solver_x_im = solver_b_im
+    Vec r_tmp_im_1, r_tmp_im_2;
+    PetscCall(VecDuplicate(solver_b_im, &r_tmp_im_1));
+    PetscCall(VecDuplicate(solver_b_im, &r_tmp_im_2));
+
+    PetscCall(MatMult(solver_a_im, solver_x_re, r_tmp_im_1));
+    PetscCall(MatMult(solver_a_re, solver_x_im, r_tmp_im_2));
+    PetscCall(VecAXPY(r_tmp_im_1, 1., r_tmp_im_2));
+    PetscCall(VecAXPY(r_tmp_im_1, -1., solver_b_im));
+
+    PetscReal r_tmp_im_norm_2 = 0.;
+    PetscCall(VecNorm(r_tmp_im_1, NORM_2, &r_tmp_im_norm_2));
+
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, ">>>> tmp block || r_re ||_2 = %021.16le\n", r_tmp_re_norm_2));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, ">>>> tmp block || r_im ||_2 = %021.16le\n", r_tmp_im_norm_2));
+#endif // block matrix by vector product
+
+#if 1
     Vec solver_block_r;
-    PetscReal b_block_norm_2 = 0.;
+    PetscReal b_block_norm_2 = 0., x_block_norm_2 = 0.;
     PetscReal r_block_norm_2 = 0.;
 
     PetscCall(VecDuplicate(solver_block_x, &solver_block_r));
 
     PetscCall(VecNorm(solver_block_b, NORM_2, &b_block_norm_2));
+    PetscCall(VecNorm(solver_block_x, NORM_2, &x_block_norm_2));
 
     PetscCall(MatMult(solver_block_a, solver_block_x, solver_block_r));
     PetscCall(VecAXPY(solver_block_r, -1., solver_block_b));
     PetscCall(VecNorm(solver_block_r, NORM_2, &r_block_norm_2));
 
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD, "block             || x ||_2 = %021.16le\n", x_block_norm_2));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "block             || b ||_2 = %021.16le\n", b_block_norm_2));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD, "block || r ||_2 / || b ||_2 = %021.16le\n", r_block_norm_2 / b_block_norm_2));
 #endif // residual norm
